@@ -1,115 +1,116 @@
-var assert = require('assert')
-  , StringSet = require('Set')
-  , Heap = require('heap')
-  , dict = require('dict')
+const FastPriorityQueue = require("fastpriorityqueue")
+const assert = require('assert')
 
-module.exports = aStar;
+class AStar {
+  
+  /**
+   * Build an instance of A*
+   * 
+   * @param  {params} Object
+   * @return {[type]}
+   */
 
-function aStar(params) {
-  assert.ok(params.start !== undefined);
-  assert.ok(params.isEnd !== undefined);
-  assert.ok(params.neighbor);
-  assert.ok(params.distance);
-  assert.ok(params.heuristic);
-  if (params.timeout === undefined) params.timeout = Infinity;
-  assert.ok(!isNaN(params.timeout));
-  var hash = params.hash || defaultHash;
+  constructor(params) {
+    assert.ok(params)
+    assert.ok(!!params.start)
+    assert.ok(!!params.end)
+    assert.ok(!!params.distance)
+    assert.ok(!!params.costEstimate)
 
-  var startNode = {
-    data: params.start,
-    g: 0,
-    h: params.heuristic(params.start),
-  };
-  var bestNode = startNode;
-  startNode.f = startNode.h;
-  // leave .parent undefined
-  var closedDataSet = new StringSet();
-  var openHeap = new Heap(heapComparator);
-  var openDataMap = dict();
-  openHeap.push(startNode);
-  openDataMap.set(hash(startNode.data), startNode);
-  var startTime = new Date();
-  while (openHeap.size()) {
-    if (new Date() - startTime > params.timeout) {
-      return {
-        status: 'timeout',
-        cost: bestNode.g,
-        path: reconstructPath(bestNode),
-      };
+    this.start = params.start
+    this.end = params.end
+
+    // Function to describe the distance between two points
+    this.distance = params.distance
+
+    // Function of a heuristic for distance from point to finish
+    this.costEstimate = params.costEstimate
+
+    // Set of already evaluated points
+    this.redSet = []
+
+    // The cost of going from start to a specific node
+    this.getToCost = {
+      [params.start.id]: 0
     }
-    var node = openHeap.pop();
-    openDataMap.delete(hash(node.data));
-    if (params.isEnd(node.data)) {
-      // done
-      return {
-        status: 'success',
-        cost: node.g,
-        path: reconstructPath(node),
-      };
+
+    // Which neighbor connected to which 
+    this.cameFrom = {}
+
+    // The cost of going from a specific node to end
+    this.goFromCost = {
+      [params.start.id]: this.costEstimate(params.start, params.end)
     }
-    // not done yet
-    closedDataSet.add(hash(node.data));
-    var neighbors = params.neighbor(node.data);
-    for (var i = 0; i < neighbors.length; i++) {
-      var neighborData = neighbors[i];
-      if (closedDataSet.contains(hash(neighborData))) {
-        // skip closed neighbors
-        continue;
+
+    // Points being currently being evaluated
+    this.greenSet = new FastPriorityQueue((a, b) => this.goFromCost[a.id] > this.goFromCost[b.id])
+    this.greenSet.add(params.start)
+  }
+
+  travel() {
+    let path
+
+    // Continue looking while we still have points
+    while (!this.greenSet.isEmpty()) {
+
+      // Get the lowest distance fringe point
+      const current = this.greenSet.poll()
+
+      // If the point we are on is the goal, recall the path between start and end
+      if (current.id === this.end.id) {
+        path = this._reconstructPath()
+        break
       }
-      var gFromThisNode = node.g + params.distance(node.data, neighborData);
-      var neighborNode = openDataMap.get(hash(neighborData));
-      var update = false;
-      if (neighborNode === undefined) {
-        // add neighbor to the open set
-        neighborNode = {
-          data: neighborData,
-        };
-        // other properties will be set later
-        openDataMap.set(hash(neighborData), neighborNode);
-      } else {
-        if (neighborNode.g < gFromThisNode) {
-          // skip this one because another route is faster
-          continue;
+
+      // We have explored this point so mark it so we don't travel to this point again
+      this.redSet.push(current.id)
+
+      // Go through each neighbor of this point
+      current.neighbors.forEach((neighbor) => {
+        // Don't explore things you've already seen!
+        if (this.redSet.indexOf(neighbor.id) > -1) {
+          return
         }
-        update = true;
-      }
-      // found a new or better route.
-      // update this neighbor with this node as its new parent
-      neighborNode.parent = node;
-      neighborNode.g = gFromThisNode;
-      neighborNode.h = params.heuristic(neighborData);
-      neighborNode.f = gFromThisNode + neighborNode.h;
-      if (neighborNode.h < bestNode.h) bestNode = neighborNode;
-      if (update) {
-        openHeap.heapify();
-      } else {
-        openHeap.push(neighborNode);
-      }
+
+        // Explore things you haven't!
+        if (this.greenSet.array.filter(item => item.id === neighbor.id).length === 0) {
+          this.greenSet.add(neighbor)
+        }
+
+        // Find the distance between the start and this point
+        const possibleDist = this.getToCost[current.id] + this.distance(current, neighbor)
+
+        // If the cost of getting to this neighbor point is greater than the cost 
+        if (this.getToCost[neighbor.id] && possibleDist >= this.getToCost[neighbor.id]) {
+          return
+        }
+
+        // So we know this point is the best first choice, let's keep it 
+
+        // Mark what point got us here so we can recall it later
+        this.cameFrom[neighbor.id] = current.id
+
+        // How much does it cost to get to this point
+        this.getToCost[neighbor.id] = possibleDist
+
+        // How much will it probably cost to get from this point to the finish
+        this.goFromCost = possibleDist + this.costEstimate(neighbor, this.end)
+      })
     }
-  }
-  // all the neighbors of every accessible node have been exhausted
-  return {
-    status: "noPath",
-    cost: bestNode.g,
-    path: reconstructPath(bestNode),
-  };
-}
 
-function reconstructPath(node) {
-  if (node.parent !== undefined) {
-    var pathSoFar = reconstructPath(node.parent);
-    pathSoFar.push(node.data);
-    return pathSoFar;
-  } else {
-    // this is the starting node
-    return [node.data];
+    return path
+  }
+
+  _reconstructPath() {
+    const path = [ this.end.id ]
+
+    while (path.slice(-1)[0] !== this.start.id) {
+      const current = this.cameFrom[path.slice(-1)[0]]
+      path.push(current)
+    }
+
+    return path.reverse()
   }
 }
 
-function defaultHash(node) {
-  return node.toString();
-}
-
-function heapComparator(a, b) {
-  return a.f - b.f;
-}
+module.exports = AStar

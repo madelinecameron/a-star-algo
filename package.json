@@ -1,17 +1,18 @@
 {
-  "name": "a-star",
-  "version": "0.2.0",
-  "description": "Generic synchronous A* search algorithm",
+  "name": "a-star-algo",
+  "version": "0.0.1",
+  "description": "Fairly generic A* implementation",
   "main": "index.js",
   "scripts": {
-    "test": "node test/test.js"
+    "test": "ava test/"
   },
-  "repository": "git://github.com/superjoe30/node-astar.git",
-  "author": "Andrew Kelley",
-  "license": "BSD",
+  "repository": "git://github.com/madelinecameron/astar.git",
+  "author": "Madeline Cameron",
+  "license": "MIT",
   "dependencies": {
-    "Set": "^0.4.1",
-    "dict": "^1.4.0",
-    "heap": "^0.2.3"
+    "fastpriorityqueue": "^0.3.1"
+  },
+  "devDependencies": {
+    "ava": "^0.25.0"
   }
 }

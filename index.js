@@ -43,7 +43,7 @@ class AStar {
     }
 
     // Points being currently being evaluated
-    this.greenSet = new FastPriorityQueue((a, b) => this.goFromCost[a.id] > this.goFromCost[b.id])
+    this.greenSet = new FastPriorityQueue((a, b) => (this.goFromCost[a.id] || Infinity) < (this.goFromCost[b.id] || Infinity))
     this.greenSet.add(params.start)
   }
 
@@ -81,7 +81,7 @@ class AStar {
         const possibleDist = this.getToCost[current.id] + this.distance(current, neighbor)
 
         // If the cost of getting to this neighbor point is greater than the cost 
-        if (this.getToCost[neighbor.id] && possibleDist >= this.getToCost[neighbor.id]) {
+        if (possibleDist >= this.getToCost[neighbor.id]) {
           return
         }
 
@@ -94,7 +94,7 @@ class AStar {
         this.getToCost[neighbor.id] = possibleDist
 
         // How much will it probably cost to get from this point to the finish
-        this.goFromCost = possibleDist + this.costEstimate(neighbor, this.end)
+        this.goFromCost[neighbor.id] = possibleDist + this.costEstimate(neighbor, this.end)
       })
     }
 
